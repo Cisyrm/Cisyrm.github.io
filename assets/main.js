@@ -18,32 +18,45 @@
     input.addEventListener('input',render);filter.addEventListener('change',render);render();
   }
   const qList=document.querySelector('#questionList');
-  if(qList && data){
-    const qInput=document.querySelector('#questionSearch');
-    const qCategory=document.querySelector('#questionCategory');
-    const qCount=document.querySelector('#questionCount');
-    const showMore=document.querySelector('#questionMore');
-    let tab='general',limit=30;
+  if(qList&&data){
+    const qInput=document.querySelector('#questionSearch'),qCategory=document.querySelector('#questionCategory');
+    const qCount=document.querySelector('#questionCount'),showMore=document.querySelector('#questionMore');
     const tabs=[...document.querySelectorAll('[data-questions-tab]')];
-    function current(){return tab==='general'?data.general:data.school}
+    const questions=data.general;
+    let tab='general',limit=30;
+    const schoolNames=[...new Set(questions.flatMap(q=>(q.sources||[]).map(v=>v.school)))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
+    const types=['正式面试','老师私面'];
     function categories(){
-      let vals=[...new Set(current().map(q=>tab==='general'?q.category:q.school))];
-      qCategory.innerHTML=`<option value="">${tab==='general'?'全部知识板块':'全部学校'}</option>`+vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
+      const vals=tab==='school'?schoolNames:tab==='mode'?types:[...new Set(questions.map(q=>q.category))];
+      const placeholder=tab==='school'?'全部学校':tab==='mode'?'全部面试类型':'全部知识板块';
+      qCategory.innerHTML=`<option value="">${placeholder}</option>`+vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
     }
     function render(){
-      let term=qInput.value.trim().toLowerCase(),category=qCategory.value;
-      let rows=current().filter(q=>(!category||(tab==='general'?q.category:q.school)===category) && (!term||[q.text,q.subcategory,q.category,q.school,q.topic,q.source].join(' ').toLowerCase().includes(term)));
-      qCount.textContent=`找到 ${rows.length} 道题 · ${tab==='general'?'通用版':'学校分类版'}`;
+      const term=qInput.value.trim().toLowerCase(),category=qCategory.value;
+      const rows=questions.filter(q=>{
+        const schools=(q.sources||[]).map(o=>o.school);
+        const ok= !category||(tab==='general'?q.category===category:tab==='school'?schools.includes(category):q.interview_type===category);
+        const keywords=[q.text,q.category,q.subcategory,q.interview_type,...schools].join(' ').toLowerCase();
+        return ok&&(!term||keywords.includes(term));
+      });
+      const label=tab==='school'?'按学校':tab==='mode'?'按面试类型':'按知识主题';
+      qCount.textContent=`共 ${questions.length} 道题 · 当前显示 ${rows.length} 道（${label}）`;
       qList.innerHTML=rows.slice(0,limit).map((q,i)=>{
-        let tags=tab==='general'?[q.category,q.subcategory,q.source,q.frequency]:[q.school,q.mode,q.topic,q.frequency];
-        return `<article class="question-card"><div class="q-index">${String(i+1).padStart(2,'0')}</div><div><p>${esc(q.text)}</p><div class="tags">${tags.filter(Boolean).slice(0,4).map((t,j)=>`<span class="tag ${j>0?'soft':''}">${esc(t)}</span>`).join('')}</div></div></article>`
-      }).join('') || '<div class="empty">没有匹配的题目。可以更换关键词或筛选条件。</div>';
+        const schools=[...new Set((q.sources||[]).map(s=>s.school))];
+        const tags=tab==='school'?[...schools,q.category,q.interview_type]:tab==='mode'?[q.interview_type,q.category,...schools]:[q.category,q.subcategory,q.interview_type,...schools];
+        return `<article class="question-card"><div class="q-index">${String(i+1).padStart(2,'0')}</div><div><p>${esc(q.text)}</p><div class="tags">${tags.filter(Boolean).map((t,j)=>`<span class="tag ${j>0?'soft':''}">${esc(t)}</span>`).join('')}</div></div></article>`;
+      }).join('')||'<div class="empty">没有匹配的题目。可以更换关键词或筛选条件。</div>';
       showMore.classList.toggle('hidden',rows.length<=limit);
     }
-    tabs.forEach(b=>b.addEventListener('click',()=>{tab=b.dataset.questionsTab;limit=30;tabs.forEach(x=>{let active=x===b;x.classList.toggle('active',active);x.setAttribute('aria-pressed',String(active));});qInput.value='';categories();render();}));
+    tabs.forEach(b=>b.addEventListener('click',()=>{
+      tab=b.dataset.questionsTab;limit=30;
+      tabs.forEach(x=>{let active=x===b;x.classList.toggle('active',active);x.setAttribute('aria-pressed',String(active))});
+      qInput.value='';categories();render();
+    }));
     qInput.addEventListener('input',()=>{limit=30;render()});qCategory.addEventListener('change',()=>{limit=30;render()});
     showMore.addEventListener('click',()=>{limit+=30;render()});categories();render();
-    if(location.hash==='#by-school'){tabs[1]?.click()}
+    if(location.hash==='#by-school')tabs.find(b=>b.dataset.questionsTab==='school')?.click();
+    else if(location.hash==='#by-mode')tabs.find(b=>b.dataset.questionsTab==='mode')?.click();
   }
 })();
 
